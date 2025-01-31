@@ -1,0 +1,3 @@
+transformers
+ninja  # For faster builds.
+psutil
