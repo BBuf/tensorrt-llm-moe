@@ -728,8 +728,7 @@ size_t MoeGemmRunner<T, WeightType, OutputType, ScaleBiasType>::calcMaxWorkspace
         try                                                                                                            \
         {                                                                                                              \
             size_t size = calcMaxWorkspaceSizeSM90<T, WeightType, OutputType, FUSION>(                                 \
-                num_experts, conf, multi_processor_count_);
-            std::cout << "size: " << size << std::endl;
+                num_experts, conf, multi_processor_count_);                                                            \
             max_size = std::max(max_size, size);                                                                       \
             has_config = true;                                                                                         \
         }                                                                                                              \
