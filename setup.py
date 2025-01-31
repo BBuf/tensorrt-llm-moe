@@ -26,6 +26,8 @@ CXX_FLAGS += ["-DENABLE_BF16", "-DENABLE_FP8"]
 
 NVCC_FLAGS += ["-DENABLE_BF16", "-DENABLE_FP8"]
 
+NVCC_FLAGS += ["-DCUTLASS_ARCH_MMA_MODIFIABLE_TMA_SM90_SUPPORTED"]
+
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}", "-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__", "-U__CUDA_NO_BFLOAT16_CONVERSIONS__", "-U__CUDA_NO_HALF2_OPERATORS__"]
 
 if CUDA_HOME is None:
@@ -146,7 +148,7 @@ if nvcc_cuda_version >= Version("11.2"):
 ext_modules = []
 
 sources=["cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_preprocessors.cpp",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_preprocessors.cpp", 
         "cpp/tensorrt_llm/kernels/mixtureOfExperts/moe_kernels.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_hopper_input.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_bf16_bf16.cu",
@@ -157,8 +159,14 @@ sources=["cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp16_uint8.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp32_fp32.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp8_fp8.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_1.generated.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_2.generated.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_3.generated.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_4.generated.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_5.generated.cu",
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_6.generated.cu",
         "cpp/tensorrt_llm/common/stringUtils.cpp",
-        "cpp/tensorrt_llm/common/logger.cpp",
+        "cpp/tensorrt_llm/common/logger.cpp", 
         "cpp/tensorrt_llm/common/tllmException.cpp",
         "moe/moe.cpp"
         ]
