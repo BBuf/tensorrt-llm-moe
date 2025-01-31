@@ -165,16 +165,18 @@ sources=["cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp",
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 include_path = []
+include_path.append("/usr/include/x86_64-linux-gnu/")
 include_path.append(os.path.join(base_dir, '3rdparty/cutlass/include/'))
 include_path.append(os.path.join(base_dir, "3rdparty/cutlass/tools/util/include/"))
 include_path.append(os.path.join(base_dir, 'cpp/'))
 include_path.append(os.path.join(base_dir, 'cpp/tensorrt_llm/cutlass_extensions/include/'))
-include_path.append("/usr/include/x86_64-linux-gnu/")
+extra_link_args = ["-L/usr/lib/x86_64-linux-gnu/", "-lnvinfer"]
 
 th_moe_extension = CUDAExtension(
-    name="moe_ops",
+    name="tensorrt_llm_moe",
     sources=sources,
     extra_compile_args={"nvcc": NVCC_FLAGS, "cxx": CXX_FLAGS},
+    extra_link_args=extra_link_args,
     include_dirs=include_path
 )
 ext_modules.append(th_moe_extension)
@@ -198,11 +200,11 @@ def get_requirements() -> List[str]:
 
 
 setuptools.setup(
-    name="moe_ops",
+    name="tensorrt_llm_moe",
     version="0.0.1",
     author="BBuf",
     license="Apache 2.0",
-    description=("moe module for pytorch"),
+    description=("tensorrt-llm-moe module for pytorch"),
     long_description=read_readme(),
     classifiers=[
         "Programming Language :: Python :: 3.8",

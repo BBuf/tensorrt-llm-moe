@@ -1,2 +1,3 @@
 build/
 moe_ops.egg-info/
+*.so

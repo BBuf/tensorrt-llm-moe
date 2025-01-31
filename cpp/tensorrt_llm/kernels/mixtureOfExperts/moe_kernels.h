@@ -22,6 +22,7 @@
 #include "tensorrt_llm/common/cudaUtils.h"
 #include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
 #include <cuda_runtime_api.h>
+#include <NvInferRuntime.h>
 #include <optional>
 #include <random>
 
