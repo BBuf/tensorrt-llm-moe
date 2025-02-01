@@ -1405,7 +1405,6 @@ size_t CutlassMoeFCRunner<T, WeightType, OutputType, ScaleBiasType, Enable>::get
     TLLM_CHECK_WITH_INFO(num_experts % ep_size == 0, "Number of experts must be a multiple of ep size");
     auto workspace = getWorkspaceDeviceBufferSizes(
         num_rows, hidden_size, inter_size, num_experts, num_experts / ep_size, k, activation_type, norm_mode);
-    std::cout << "workspace" << "  " << std::endl;
     auto ws_size = tensorrt_llm::common::calculateTotalWorkspaceSize(workspace.data(), workspace.size());
     TLLM_LOG_DEBUG("Mixture Of Experts Plugin requires workspace of %2f MiB", ws_size / 1024.f / 1024.f);
     return ws_size;
