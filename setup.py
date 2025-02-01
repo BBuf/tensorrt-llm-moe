@@ -13,7 +13,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME
 ROOT_DIR = os.path.dirname(__file__)
 
 # Supported NVIDIA GPU architectures.
-SUPPORTED_ARCHS = {"8.0"}
+SUPPORTED_ARCHS = {"8.0", "9.0"}
 
 # Compiler flags.
 CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
@@ -26,9 +26,9 @@ CXX_FLAGS += ["-DENABLE_BF16", "-DENABLE_FP8"]
 
 NVCC_FLAGS += ["-DENABLE_BF16", "-DENABLE_FP8"]
 
-NVCC_FLAGS += ["-DCUTLASS_ARCH_MMA_MODIFIABLE_TMA_SM90_SUPPORTED"]
-
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}", "-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__", "-U__CUDA_NO_BFLOAT16_CONVERSIONS__", "-U__CUDA_NO_HALF2_OPERATORS__"]
+
+
 
 if CUDA_HOME is None:
     raise RuntimeError(
@@ -137,6 +137,13 @@ if nvcc_cuda_version < Version("11.8"):
 for capability in compute_capabilities:
     num = capability[0] + capability[2]
     NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
+    if int(num) >= 90:
+        NVCC_FLAGS += [
+            "-DCOMPILE_HOPPER_TMA_GEMMS",
+            "-DCUTLASS_ARCH_MMA_SM90_SUPPORTED=1",
+            "-DCUDA_12_0_SM90_FEATURES_SUPPORTED",
+            "-D__CUDA_ARCH_FEAT_SM90_ALL"
+        ]
     if capability.endswith("+PTX"):
         NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=compute_{num}"]
 
@@ -144,6 +151,7 @@ for capability in compute_capabilities:
 if nvcc_cuda_version >= Version("11.2"):
     num_threads = min(os.cpu_count(), 8)
     NVCC_FLAGS += ["--threads", str(num_threads)]
+
 
 ext_modules = []
 
@@ -180,12 +188,14 @@ include_path.append(os.path.join(base_dir, 'cpp/'))
 include_path.append(os.path.join(base_dir, 'cpp/tensorrt_llm/cutlass_extensions/include/'))
 extra_link_args = ["-L/usr/lib/x86_64-linux-gnu/", "-lnvinfer"]
 
+libraries = ["cuda"]
 th_moe_extension = CUDAExtension(
     name="tensorrt_llm_moe",
     sources=sources,
     extra_compile_args={"nvcc": NVCC_FLAGS, "cxx": CXX_FLAGS},
     extra_link_args=extra_link_args,
-    include_dirs=include_path
+    include_dirs=include_path,
+    libraries=libraries,
 )
 ext_modules.append(th_moe_extension)
 

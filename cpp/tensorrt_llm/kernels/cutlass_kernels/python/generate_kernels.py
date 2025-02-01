@@ -419,8 +419,8 @@ def generate_sm90_grouped_gemm_operations():
 
 
 def generate_sm90_operations():
+    # operations = generate_sm90_mixed_gemm_operations()
     operations = generate_sm90_grouped_gemm_operations()
-    # operations.extend(generate_sm90_grouped_gemm_operations())
     return operations
 
 
