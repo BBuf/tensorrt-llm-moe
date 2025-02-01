@@ -138,7 +138,7 @@ for capability in compute_capabilities:
     num = capability[0] + capability[2]
     if int(num) >= 90:
         # 对于 Hopper 架构(sm_90)，使用 sm_90a
-        NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}a"]
+        NVCC_FLAGS += ["-gencode", f"arch=compute_{num}a,code=sm_{num}a"]
         NVCC_FLAGS += [
             "-DCOMPILE_HOPPER_TMA_GEMMS",
             "-DCUTLASS_ARCH_MMA_SM90_SUPPORTED=1",
