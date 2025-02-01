@@ -136,14 +136,17 @@ if nvcc_cuda_version < Version("11.8"):
 # Add target compute capabilities to NVCC flags.
 for capability in compute_capabilities:
     num = capability[0] + capability[2]
-    NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
     if int(num) >= 90:
+        # 对于 Hopper 架构(sm_90)，使用 sm_90a
+        NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}a"]
         NVCC_FLAGS += [
             "-DCOMPILE_HOPPER_TMA_GEMMS",
             "-DCUTLASS_ARCH_MMA_SM90_SUPPORTED=1",
             "-DCUDA_12_0_SM90_FEATURES_SUPPORTED",
             "-D__CUDA_ARCH_FEAT_SM90_ALL"
         ]
+    else:
+        NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
     if capability.endswith("+PTX"):
         NVCC_FLAGS += ["-gencode", f"arch=compute_{num},code=compute_{num}"]
 
