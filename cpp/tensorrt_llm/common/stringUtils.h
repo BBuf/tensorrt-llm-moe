@@ -24,7 +24,6 @@
 #include <memory>  // std::make_unique
 #include <sstream> // std::stringstream
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace tensorrt_llm::common
@@ -65,17 +64,15 @@ std::string fmtstr(char const* format, ...) __attribute__((format(printf, 1, 2))
 #define __PRETTY_FUNCTION__ __FUNCSIG__
 #endif
 
-auto constexpr kDefaultDelimiter = ", ";
-
 template <typename U, typename TStream, typename T>
-inline TStream& arr2outCasted(TStream& out, T* arr, size_t size, char const* delim = kDefaultDelimiter)
+inline TStream& arr2outCasted(TStream& out, T* arr, size_t size)
 {
     out << "(";
     if (size > 0)
     {
         for (size_t i = 0; i < size - 1; ++i)
         {
-            out << static_cast<U>(arr[i]) << delim;
+            out << static_cast<U>(arr[i]) << ", ";
         }
         out << static_cast<U>(arr[size - 1]);
     }
@@ -84,30 +81,27 @@ inline TStream& arr2outCasted(TStream& out, T* arr, size_t size, char const* del
 }
 
 template <typename TStream, typename T>
-inline TStream& arr2out(TStream& out, T* arr, size_t size, char const* delim = kDefaultDelimiter)
+inline TStream& arr2out(TStream& out, T* arr, size_t size)
 {
-    return arr2outCasted<T>(out, arr, size, delim);
+    return arr2outCasted<T>(out, arr, size);
 }
 
 template <typename T>
-inline std::string arr2str(T* arr, size_t size, char const* delim = kDefaultDelimiter)
+inline std::string arr2str(T* arr, size_t size)
 {
     std::stringstream ss;
-    return arr2out(ss, arr, size, delim).str();
+    return arr2out(ss, arr, size).str();
 }
 
 template <typename T>
-inline std::string vec2str(std::vector<T> const& vec, char const* delim = kDefaultDelimiter)
+inline std::string vec2str(std::vector<T> vec)
 {
-    return arr2str(vec.data(), vec.size(), delim);
+    return arr2str(vec.data(), vec.size());
 }
 
 inline bool strStartsWith(std::string const& str, std::string const& prefix)
 {
     return str.rfind(prefix, 0) == 0;
 }
-
-/// @brief Split a string into a set of strings using a delimiter
-std::unordered_set<std::string> str2set(std::string const& input, char delimiter);
 
 } // namespace tensorrt_llm::common

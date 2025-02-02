@@ -16,9 +16,8 @@
 
 #pragma once
 
-#include <cstdint>
-#include <optional>
-#include <string>
+#include "stdlib.h"
+#include "tensor.h"
 
 namespace tensorrt_llm
 {
@@ -40,7 +39,7 @@ public:
 
     constexpr QuantMode(QuantMode const&) noexcept = default;
 
-    constexpr QuantMode& operator=(QuantMode const& other) noexcept = default;
+    constexpr QuantMode& operator=(const QuantMode& other) noexcept = default;
 
     static constexpr QuantMode none() noexcept
     {
@@ -90,16 +89,6 @@ public:
     static constexpr QuantMode fp8Qdq() noexcept
     {
         return QuantMode(BaseType(1u) << 8);
-    }
-
-    static constexpr QuantMode fp8RowWise() noexcept
-    {
-        return QuantMode(BaseType(1u) << 3 | BaseType(1u) << 4 | BaseType(1u) << 9);
-    }
-
-    static constexpr QuantMode w4a8QServe() noexcept
-    {
-        return QuantMode(BaseType(1u) << 10);
     }
 
     constexpr BaseType value() const noexcept
@@ -162,20 +151,14 @@ public:
         return isSet(fp8Qdq());
     }
 
-    constexpr bool hasFp8RowWise() const noexcept
-    {
-        return isSet(fp8RowWise());
-    }
-
     constexpr bool hasKvCacheQuant() const noexcept
     {
         return hasInt8KvCache() || hasFp8KvCache();
     }
 
     static constexpr QuantMode fromDescription(bool quantizeWeights = false, bool quantizeActivations = false,
-        bool perToken = false, bool perChannel = false, bool perGroup = false, bool useInt4Weights = false,
-        bool useInt8KvCache = false, bool useFp8KvCache = false, bool useFp8Qdq = false, bool useFp8RowWise = false,
-        bool useW4a8QServe = false)
+        bool perToken = false, bool perChannel = false, bool useInt4Weights = false, bool useInt8KvCache = false,
+        bool useFp8KvCache = false, bool useFp8Qdq = false)
     {
         QuantMode quantMode{};
         if (quantizeWeights)
@@ -199,10 +182,6 @@ public:
         {
             quantMode += QuantMode::perTokenScaling();
         }
-        if (perGroup)
-        {
-            quantMode += QuantMode::perGroupScaling();
-        }
 
         if (useInt8KvCache)
         {
@@ -219,133 +198,35 @@ public:
             quantMode += fp8Qdq();
         }
 
-        if (useFp8RowWise)
-        {
-            quantMode += fp8RowWise();
-        }
-
-        if (useW4a8QServe)
-        {
-            quantMode += w4a8QServe();
-        }
-
         return quantMode;
     }
 
-    static constexpr QuantMode useSmoothQuant(bool perToken = false, bool perChannel = false)
-    {
-        return fromDescription(true, true, perToken, perChannel);
-    }
-
-    static constexpr QuantMode useQServe(bool perGroup)
-    {
-        return fromDescription(true, true, false, false, perGroup, true, false, false, false, false, true);
-    }
-
-    static constexpr QuantMode useWeightOnly(bool useInt4Weights = false, bool perGroup = false)
-    {
-        return fromDescription(true, false, false, false, perGroup, useInt4Weights);
-    }
-
-    static QuantMode const fromQuantAlgo(
-        std::optional<std::string> quantAlgo = std::nullopt, std::optional<std::string> kvCacheQuantAlgo = std::nullopt)
-    {
-        QuantMode quantMode{};
-        if (quantAlgo == "W8A16")
-        {
-            quantMode = useWeightOnly(false, false);
-        }
-        else if (quantAlgo == "W4A16")
-        {
-            quantMode = useWeightOnly(true, false);
-        }
-        else if (quantAlgo == "W4A16_AWQ")
-        {
-            quantMode = useWeightOnly(true, true);
-        }
-        else if (quantAlgo == "W4A8_AWQ")
-        {
-            quantMode = useWeightOnly(true, true);
-        }
-        else if (quantAlgo == "W4A8_QSERVE_PER_GROUP")
-        {
-            quantMode = useQServe(false);
-        }
-        else if (quantAlgo == "W4A8_QSERVE_PER_CHANNEL")
-        {
-            quantMode = useQServe(true);
-        }
-        else if (quantAlgo == "W4A16_GPTQ")
-        {
-            quantMode = useWeightOnly(true, true);
-        }
-        else if (quantAlgo == "W8A8_SQ_PER_CHANNEL")
-        {
-            quantMode = useSmoothQuant(false, true);
-        }
-        else if (quantAlgo == "W8A8_SQ_PER_TENSOR_PLUGIN")
-        {
-            quantMode = useSmoothQuant(false, false);
-        }
-        else if (quantAlgo == "W8A8_SQ_PER_CHANNEL_PER_TOKEN_PLUGIN")
-        {
-            quantMode = useSmoothQuant(true, true);
-        }
-        else if (quantAlgo == "W8A8_SQ_PER_CHANNEL_PER_TENSOR_PLUGIN")
-        {
-            quantMode = useSmoothQuant(false, true);
-        }
-        else if (quantAlgo == "W8A8_SQ_PER_TENSOR_PER_TOKEN_PLUGIN")
-        {
-            quantMode = useSmoothQuant(true, false);
-        }
-        else if (quantAlgo == "FP8")
-        {
-            quantMode = fromDescription(false, false, false, false, false, false, false, false, true);
-        }
-        else if (quantAlgo == "FP8_ROWWISE")
-        {
-            quantMode = fromDescription(false, false, true, true, false, false, false, false, false, true);
-        }
-
-        if (kvCacheQuantAlgo == "INT8")
-        {
-            quantMode += int8KvCache();
-        }
-        else if (kvCacheQuantAlgo == "FP8")
-        {
-            quantMode += fp8KvCache();
-        }
-
-        return quantMode;
-    }
-
-    constexpr QuantMode operator+(QuantMode const& other) const noexcept
+    constexpr QuantMode operator+(const QuantMode& other) const noexcept
     {
         return QuantMode(mValue | other.mValue);
     }
 
-    constexpr QuantMode& operator+=(QuantMode const& other) noexcept
+    constexpr QuantMode& operator+=(const QuantMode& other) noexcept
     {
         return *this = *this + other;
     }
 
-    constexpr QuantMode operator-(QuantMode const& other) const noexcept
+    constexpr QuantMode operator-(const QuantMode& other) const noexcept
     {
         return QuantMode(mValue & ~other.mValue);
     }
 
-    constexpr QuantMode& operator-=(QuantMode const& other) noexcept
+    constexpr QuantMode& operator-=(const QuantMode& other) noexcept
     {
         return *this = *this - other;
     }
 
-    constexpr bool operator==(QuantMode const& other) const noexcept
+    constexpr bool operator==(const QuantMode& other) const noexcept
     {
         return mValue == other.mValue;
     }
 
-    constexpr bool operator!=(QuantMode const& other) const noexcept
+    constexpr bool operator!=(const QuantMode& other) const noexcept
     {
         return !(*this == other);
     }

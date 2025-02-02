@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-#include "tensorrt_llm/common/assert.h"
+#include "assert.h"
+
+bool CHECK_DEBUG_ENABLED = false;
 
 namespace
 {
 
-bool initCheckDebug()
+#if !defined(_MSC_VER)
+__attribute__((constructor))
+#endif
+void initOnLoad()
 {
-    auto constexpr kDebugEnabled = "TLLM_DEBUG_MODE";
+    auto constexpr kDebugEnabled = "TRT_LLM_DEBUG_MODE";
     auto const debugEnabled = std::getenv(kDebugEnabled);
-    return debugEnabled && debugEnabled[0] == '1';
+    if (debugEnabled && debugEnabled[0] == '1')
+    {
+        CHECK_DEBUG_ENABLED = true;
+    }
 }
 } // namespace
-
-bool DebugConfig::isCheckDebugEnabled()
-{
-    static bool const debugEnabled = initCheckDebug();
-    return debugEnabled;
-}

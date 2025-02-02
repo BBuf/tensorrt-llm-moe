@@ -159,9 +159,7 @@ if nvcc_cuda_version >= Version("11.2"):
 ext_modules = []
 
 sources=["cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_preprocessors.cpp", 
         "cpp/tensorrt_llm/kernels/mixtureOfExperts/moe_kernels.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_hopper_input.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_bf16_bf16.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_bf16_uint4.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_bf16_uint8.cu",
@@ -169,13 +167,6 @@ sources=["cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp16_uint4.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp16_uint8.cu",
         "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp32_fp32.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels_fp8_fp8.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_1.generated.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_2.generated.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_3.generated.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_4.generated.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_5.generated.cu",
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/generated_kernels/gemm_grouped/cutlass_kernel_file_6.generated.cu",
         "cpp/tensorrt_llm/common/stringUtils.cpp",
         "cpp/tensorrt_llm/common/logger.cpp", 
         "cpp/tensorrt_llm/common/tllmException.cpp",
@@ -193,7 +184,7 @@ extra_link_args = ["-L/usr/lib/x86_64-linux-gnu/", "-lnvinfer"]
 
 libraries = ["cuda"]
 th_moe_extension = CUDAExtension(
-    name="tensorrt_llm_moe",
+    name="tensorrt_llm_moe_2",
     sources=sources,
     extra_compile_args={"nvcc": NVCC_FLAGS, "cxx": CXX_FLAGS},
     extra_link_args=extra_link_args,
@@ -221,7 +212,7 @@ def get_requirements() -> List[str]:
 
 
 setuptools.setup(
-    name="tensorrt_llm_moe",
+    name="tensorrt_llm_moe_2",
     version="0.0.1",
     author="BBuf",
     license="Apache 2.0",

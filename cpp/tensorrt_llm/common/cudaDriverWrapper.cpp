@@ -30,60 +30,38 @@
 
 #include "cudaDriverWrapper.h"
 #include "tensorrt_llm/common/assert.h"
-#include <cstdio>
 #include <cuda.h>
+#include <stdio.h>
 
-namespace tensorrt_llm::common
+namespace tensorrt_llm
 {
-
-std::shared_ptr<CUDADriverWrapper> CUDADriverWrapper::getInstance()
+namespace common
 {
-    static std::mutex mutex;
-    static std::weak_ptr<CUDADriverWrapper> instance;
-    std::shared_ptr<CUDADriverWrapper> result = instance.lock();
-    if (result)
-    {
-        return result;
-    }
-
-    std::lock_guard<std::mutex> lock(mutex);
-    result = instance.lock();
-    if (!result)
-    {
-        result = std::shared_ptr<CUDADriverWrapper>(new CUDADriverWrapper());
-        instance = result;
-    }
-    return result;
-}
 
 CUDADriverWrapper::CUDADriverWrapper()
-    : handle(dllOpen(CUDA_LIB_NAME))
 {
-
+    handle = dllOpen(CUDA_LIB_NAME);
     TLLM_CHECK_WITH_INFO(handle != nullptr, "CUDA driver library is not open correctly.");
 
-    auto load_sym = [](void* handle, char const* name)
+    auto load_sym = [](void* handle, const char* name)
     {
         void* ret = dllGetSym(handle, name);
         return ret;
     };
 
-    *reinterpret_cast<void**>(&_cuGetErrorName) = load_sym(handle, "cuGetErrorName");
-    *reinterpret_cast<void**>(&_cuGetErrorMessage) = load_sym(handle, "cuGetErrorMessage");
-    *reinterpret_cast<void**>(&_cuFuncSetAttribute) = load_sym(handle, "cuFuncSetAttribute");
-    *reinterpret_cast<void**>(&_cuLinkComplete) = load_sym(handle, "cuLinkComplete");
-    *reinterpret_cast<void**>(&_cuModuleUnload) = load_sym(handle, "cuModuleUnload");
-    *reinterpret_cast<void**>(&_cuLinkDestroy) = load_sym(handle, "cuLinkDestroy");
-    *reinterpret_cast<void**>(&_cuModuleLoadData) = load_sym(handle, "cuModuleLoadData");
-    *reinterpret_cast<void**>(&_cuLinkCreate) = load_sym(handle, "cuLinkCreate_v2");
-    *reinterpret_cast<void**>(&_cuModuleGetFunction) = load_sym(handle, "cuModuleGetFunction");
-    *reinterpret_cast<void**>(&_cuModuleGetGlobal) = load_sym(handle, "cuModuleGetGlobal_v2");
-    *reinterpret_cast<void**>(&_cuLinkAddFile) = load_sym(handle, "cuLinkAddFile_v2");
-    *reinterpret_cast<void**>(&_cuLinkAddData) = load_sym(handle, "cuLinkAddData_v2");
-    *reinterpret_cast<void**>(&_cuLaunchCooperativeKernel) = load_sym(handle, "cuLaunchCooperativeKernel");
-    *reinterpret_cast<void**>(&_cuLaunchKernel) = load_sym(handle, "cuLaunchKernel");
-    *reinterpret_cast<void**>(&_cuTensorMapEncodeTiled) = load_sym(handle, "cuTensorMapEncodeTiled");
-    *reinterpret_cast<void**>(&_cuMemcpyDtoH) = load_sym(handle, "cuMemcpyDtoH_v2");
+    *(void**) (&_cuGetErrorName) = load_sym(handle, "cuGetErrorName");
+    *(void**) (&_cuFuncSetAttribute) = load_sym(handle, "cuFuncSetAttribute");
+    *(void**) (&_cuLinkComplete) = load_sym(handle, "cuLinkComplete");
+    *(void**) (&_cuModuleUnload) = load_sym(handle, "cuModuleUnload");
+    *(void**) (&_cuLinkDestroy) = load_sym(handle, "cuLinkDestroy");
+    *(void**) (&_cuModuleLoadData) = load_sym(handle, "cuModuleLoadData");
+    *(void**) (&_cuLinkCreate) = load_sym(handle, "cuLinkCreate_v2");
+    *(void**) (&_cuModuleGetFunction) = load_sym(handle, "cuModuleGetFunction");
+    *(void**) (&_cuModuleGetGlobal) = load_sym(handle, "cuModuleGetGlobal_v2");
+    *(void**) (&_cuLinkAddFile) = load_sym(handle, "cuLinkAddFile_v2");
+    *(void**) (&_cuLinkAddData) = load_sym(handle, "cuLinkAddData_v2");
+    *(void**) (&_cuLaunchCooperativeKernel) = load_sym(handle, "cuLaunchCooperativeKernel");
+    *(void**) (&_cuLaunchKernel) = load_sym(handle, "cuLaunchKernel");
 }
 
 CUDADriverWrapper::~CUDADriverWrapper()
@@ -91,14 +69,9 @@ CUDADriverWrapper::~CUDADriverWrapper()
     dllClose(handle);
 }
 
-CUresult CUDADriverWrapper::cuGetErrorName(CUresult error, char const** pStr) const
+CUresult CUDADriverWrapper::cuGetErrorName(CUresult error, const char** pStr) const
 {
     return (*_cuGetErrorName)(error, pStr);
-}
-
-CUresult CUDADriverWrapper::cuGetErrorMessage(CUresult error, char const** pStr) const
-{
-    return (*_cuGetErrorMessage)(error, pStr);
 }
 
 CUresult CUDADriverWrapper::cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int value) const
@@ -121,7 +94,7 @@ CUresult CUDADriverWrapper::cuLinkDestroy(CUlinkState state) const
     return (*_cuLinkDestroy)(state);
 }
 
-CUresult CUDADriverWrapper::cuModuleLoadData(CUmodule* module, void const* image) const
+CUresult CUDADriverWrapper::cuModuleLoadData(CUmodule* module, const void* image) const
 {
     return (*_cuModuleLoadData)(module, image);
 }
@@ -132,24 +105,24 @@ CUresult CUDADriverWrapper::cuLinkCreate(
     return (*_cuLinkCreate)(numOptions, options, optionValues, stateOut);
 }
 
-CUresult CUDADriverWrapper::cuModuleGetFunction(CUfunction* hfunc, CUmodule hmod, char const* name) const
+CUresult CUDADriverWrapper::cuModuleGetFunction(CUfunction* hfunc, CUmodule hmod, const char* name) const
 {
     return (*_cuModuleGetFunction)(hfunc, hmod, name);
 }
 
-CUresult CUDADriverWrapper::cuModuleGetGlobal(CUdeviceptr* dptr, size_t* bytes, CUmodule hmod, char const* name) const
+CUresult CUDADriverWrapper::cuModuleGetGlobal(CUdeviceptr* dptr, size_t* bytes, CUmodule hmod, const char* name) const
 {
     return (*_cuModuleGetGlobal)(dptr, bytes, hmod, name);
 }
 
-CUresult CUDADriverWrapper::cuLinkAddFile(CUlinkState state, CUjitInputType type, char const* path,
+CUresult CUDADriverWrapper::cuLinkAddFile(CUlinkState state, CUjitInputType type, const char* path,
     unsigned int numOptions, CUjit_option* options, void** optionValues) const
 {
     return (*_cuLinkAddFile)(state, type, path, numOptions, options, optionValues);
 }
 
 CUresult CUDADriverWrapper::cuLinkAddData(CUlinkState state, CUjitInputType type, void* data, size_t size,
-    char const* name, unsigned int numOptions, CUjit_option* options, void** optionValues) const
+    const char* name, unsigned int numOptions, CUjit_option* options, void** optionValues) const
 {
     return (*_cuLinkAddData)(state, type, data, size, name, numOptions, options, optionValues);
 }
@@ -170,18 +143,5 @@ CUresult CUDADriverWrapper::cuLaunchKernel(CUfunction f, unsigned int gridDimX, 
         f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes, hStream, kernelParams, extra);
 }
 
-CUresult CUDADriverWrapper::cuTensorMapEncodeTiled(CUtensorMap* tensorMap, CUtensorMapDataType tensorDataType,
-    cuuint32_t tensorRank, void* globalAddress, cuuint64_t const* globalDim, cuuint64_t const* globalStrides,
-    cuuint32_t const* boxDim, cuuint32_t const* elementStrides, CUtensorMapInterleave interleave,
-    CUtensorMapSwizzle swizzle, CUtensorMapL2promotion l2Promotion, CUtensorMapFloatOOBfill oobFill) const
-{
-    return (*_cuTensorMapEncodeTiled)(tensorMap, tensorDataType, tensorRank, globalAddress, globalDim, globalStrides,
-        boxDim, elementStrides, interleave, swizzle, l2Promotion, oobFill);
-}
-
-CUresult CUDADriverWrapper::cuMemcpyDtoH(void* dstHost, CUdeviceptr srcDevice, size_t ByteCount) const
-{
-    return (*_cuMemcpyDtoH)(dstHost, srcDevice, ByteCount);
-}
-
-} // namespace tensorrt_llm::common
+} // namespace common
+} // namespace tensorrt_llm

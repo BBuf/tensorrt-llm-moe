@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,16 +121,16 @@ void invokeFakeQuantize(T_OUT* dst, const T_IN* src, const int64_t numel, cudaSt
 }
 
 template void invokeFakeQuantize<__nv_fp8_e4m3, float, float>(
-    float* dst, float const* src, const int64_t numel, cudaStream_t stream);
+    float* dst, const float* src, const int64_t numel, cudaStream_t stream);
 template void invokeFakeQuantize<float, float, __nv_fp8_e4m3>(
-    float* dst, __nv_fp8_e4m3 const* src, const int64_t numel, cudaStream_t stream);
+    float* dst, const __nv_fp8_e4m3* src, const int64_t numel, cudaStream_t stream);
 template void invokeFakeQuantize<__nv_fp8_e4m3, half, half>(
-    half* dst, half const* src, const int64_t numel, cudaStream_t stream);
+    half* dst, const half* src, const int64_t numel, cudaStream_t stream);
 template void invokeFakeQuantize<__nv_fp8_e4m3, __nv_bfloat16, __nv_bfloat16>(
-    __nv_bfloat16* dst, __nv_bfloat16 const* src, const int64_t numel, cudaStream_t stream);
+    __nv_bfloat16* dst, const __nv_bfloat16* src, const int64_t numel, cudaStream_t stream);
 
 template void invokeFakeQuantize<float, half, float>(
-    half* dst, float const* src, const int64_t numel, cudaStream_t stream);
+    half* dst, const float* src, const int64_t numel, cudaStream_t stream);
 
 __device__ float atomicMaxExtd(float* address, float val)
 {
@@ -146,7 +146,7 @@ inline __device__ T atomicMaxExtdV2(T* address, T val)
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900)
     static_assert(std::is_same_v<T, half> | std::is_same_v<T, __nv_bfloat16>, "T needs to be either half or bfloat16");
     // The address in 64 bits.
-    uint64_t address_u64 = reinterpret_cast<uint64_t const&>(address);
+    uint64_t address_u64 = reinterpret_cast<const uint64_t&>(address);
 
     // Pack the input value into 32 bits.
     union
@@ -155,7 +155,7 @@ inline __device__ T atomicMaxExtdV2(T* address, T val)
         uint16_t u[2];
     } old, tmp = {};
 
-    int const loc = (address_u64 & 0x2) >> 1;
+    const int loc = (address_u64 & 0x2) >> 1;
     tmp.v[loc] = val;
 
     // 4B aligned pointer.
@@ -206,10 +206,6 @@ __device__ __nv_bfloat16 atomicMaxExtd(__nv_bfloat16* address, __nv_bfloat16 val
     }
 
     return __ushort_as_bfloat16(old);
-#else
-    assert(0);
-    asm volatile("brkpt;\n" ::);
-    return __nv_bfloat16(0);
 #endif
 }
 
@@ -227,7 +223,7 @@ __global__ void computeFP8QuantizeScale(T_S* quant_ptr, const T_W* weights, cons
                 auto val = fabs(static_cast<float>(weights[i]));
                 max = max > val ? max : val;
             }
-            auto const scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
+            const auto scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900)
             if constexpr (std::is_same_v<T_S, float>)
             {
@@ -235,7 +231,7 @@ __global__ void computeFP8QuantizeScale(T_S* quant_ptr, const T_W* weights, cons
             }
             else
             {
-                auto const address_u64 = reinterpret_cast<uint64_t>(quant_ptr + col);
+                const auto address_u64 = reinterpret_cast<uint64_t>(quant_ptr + col);
                 if ((col == 0 && address_u64 % 4 != 0) || (col == n - 1 && address_u64 % 4 == 0))
                     atomicMaxExtd(quant_ptr + col, scale);
                 else
@@ -248,7 +244,7 @@ __global__ void computeFP8QuantizeScale(T_S* quant_ptr, const T_W* weights, cons
     }
     else if (QUANTIZE_MODE == QuantizeMode::PER_TOKEN)
     {
-        auto const nrows = size / n;
+        const auto nrows = size / n;
         for (int64_t row = blockIdx.x; row < nrows; row += gridDim.x)
         {
             float max = 0.f;
@@ -260,7 +256,7 @@ __global__ void computeFP8QuantizeScale(T_S* quant_ptr, const T_W* weights, cons
             max = blockReduceMax<float>(max);
             if (threadIdx.x == 0)
             {
-                auto const scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
+                const auto scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
                 quant_ptr[row] = scale;
             }
         }
@@ -276,7 +272,7 @@ __global__ void computeFP8QuantizeScale(T_S* quant_ptr, const T_W* weights, cons
         max = blockReduceMax<float>(max);
         if (threadIdx.x == 0)
         {
-            auto const scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
+            const auto scale = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
             atomicMaxExtd(quant_ptr, scale);
         }
     }
@@ -330,19 +326,19 @@ __global__ void dynamicQuantizeMatrixPerToken(
     extern __shared__ __align__(sizeof(float)) char _shmem[];
     T_IN* shmem = reinterpret_cast<T_IN*>(_shmem);
     constexpr float min_scaling_factor = 1.0f / (FP8_E4M3_MAX * 512.f);
-    auto const nrows = numel / lda;
+    const auto nrows = numel / lda;
     for (int64_t row = blockIdx.x; row < nrows; row += gridDim.x)
     {
         float max = 0.f;
         for (int64_t i = threadIdx.x; i < lda; i += blockDim.x)
         {
-            auto const in = input[row * lda + i];
+            const auto in = input[row * lda + i];
             shmem[i] = in;
             auto val = fabs(static_cast<float>(in));
             max = max > val ? max : val;
         }
         max = blockAllReduceMax<float>(max); // __syncthreads() called so we can read shmem
-        auto const s = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
+        const auto s = (T_S) std::max(max / FP8_E4M3_MAX, min_scaling_factor);
         for (int64_t i = threadIdx.x; i < lda; i += blockDim.x)
         {
             // true means we are quantizing
@@ -363,7 +359,7 @@ void invokeComputeScalesAndQuantizeMatrix(T_OUT* output, T_S* quant_ptr, const T
     {
         dim3 grid(numel / lda);
         bool use_shmem = true;
-        auto const shmem_size = lda * sizeof(T_IN);
+        const auto shmem_size = lda * sizeof(T_IN);
         if (shmem_size >= (48 << 10))
         {
             cudaError_t ret = cudaFuncSetAttribute(dynamicQuantizeMatrixPerToken<T_OUT, T_S, T_IN>,

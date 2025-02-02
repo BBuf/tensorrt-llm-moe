@@ -1,71 +1,24 @@
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDACachingAllocator.h>
+#include <cublasLt.h>
+#include <cublas_v2.h>
 #include <cuda_fp16.h>
 
 #include <optional>
-#include <algorithm>
 
 #include "tensorrt_llm/kernels/mixtureOfExperts/moe_kernels.h"
-#include "tensorrt_llm/kernels/cutlass_kernels/cutlass_preprocessors.h"
+#include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
 
 #include "utils.h"
 
 using torch::Tensor;
 
-// 获取SM版本
-int getSMVersion() {
-    int device = -1;
-    cudaGetDevice(&device);
-    cudaDeviceProp props;
-    cudaGetDeviceProperties(&props, device);
-    return props.major * 10 + props.minor;
-}
-
-template<typename T, typename WeightType>
-std::vector<tensorrt_llm::cutlass_extensions::CutlassGemmConfig> getFilteredConfigs(
-    tensorrt_llm::kernels::CutlassMoeFCRunner<T, WeightType>& moe_runner, int sm) {
-    auto tactics = moe_runner.getTactics();
-    if (sm == 89) {
-        // Filter some unsupported configs for L40S
-        auto it = std::remove_if(tactics.begin(), tactics.end(),
-            [&](auto conf) {
-                using tensorrt_llm::cutlass_extensions::CutlassTileConfig;
-                auto checks = std::vector{
-                    // Fail for BF16/FP16
-                    conf.tile_config == CutlassTileConfig::CtaShape128x128x64_WarpShape64x32x64,
-                    conf.tile_config == CutlassTileConfig::CtaShape64x128x64_WarpShape32x64x64 && conf.stages == 4,
-                    // Fail for FP8
-                    false && conf.tile_config == CutlassTileConfig::CtaShape16x256x128_WarpShape16x64x128
-                        && conf.stages >= 3,
-                };
-
-                return std::any_of(checks.begin(), checks.end(), [](auto v) { return v; });
-            });
-        tactics.erase(it, tactics.end());
-    }
-
-    if (tactics.empty()) {
-        throw std::runtime_error("No valid GEMM tactics found");
-    }
-
-    return tactics;
-}
-
-template<typename T, typename WeightType>
-std::pair<tensorrt_llm::cutlass_extensions::CutlassGemmConfig, tensorrt_llm::cutlass_extensions::CutlassGemmConfig> 
-selectTacticsForArch(tensorrt_llm::kernels::CutlassMoeFCRunner<T, WeightType>& moe_runner, int sm) {
-    bool is_sm90 = sm >= 90;  // 这里移除了INT_QUANT的判断,因为我们在模板中处理类型
-    auto tactics = getFilteredConfigs(moe_runner, sm);
-    auto it = std::find_if(tactics.begin(), tactics.end(), [is_sm90](auto& c) { return c.is_sm90 == is_sm90; });
-    if (it == tactics.end()) {
-        // Fall back to any tactic
-        std::cout << "WARNING: Could not find config for sm version " << sm << std::endl;
-        return std::make_pair(tactics[0], tactics[0]);
-    }
-
-    return std::make_pair(*it, *it);
-}
+// template<typename T>
+// inline T* get_ptr(torch::Tensor& t)
+// {
+//     return reinterpret_cast<T*>(t.data_ptr());
+// }
 
 tensorrt_llm::ActivationType getActivationType(std::string activation_type_str)
 {
@@ -107,27 +60,30 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
     auto      stream      = at::cuda::getCurrentCUDAStream().stream();
 
     T* input_act_ptr     = get_ptr<T>(input_activations);
-    float* gating_output_ptr = get_ptr<float>(gating_output);
+    T* gating_output_ptr = get_ptr<T>(gating_output);
 
     WeightType*           fc1_expert_weights_ptr = get_ptr<WeightType>(fc1_expert_weights);
+    static constexpr bool is_fp16_or_fp32 =
+        std::is_same<WeightType, float>::value || std::is_same<WeightType, half>::value;
+#ifdef ENABLE_BF16
+    static constexpr bool ignore_scales = is_fp16_or_fp32 || std::is_same<WeightType, __nv_bfloat16>::value;
+#else
+    static constexpr bool ignore_scales = is_fp16_or_fp32;
+#endif
 
+    T* fc1_scales_ptr        = ignore_scales ? nullptr : nullptr;
     T* fc1_expert_biases_ptr = nullptr;
 
     WeightType* fc2_expert_weights_ptr = get_ptr<WeightType>(fc2_expert_weights);
+    T*          fc2_scales_ptr         = ignore_scales ? nullptr : nullptr;
     T*          fc2_expert_biases_ptr  = nullptr;
 
+    // bool* finished_ptr   = get_ptr<bool>(finished);
     bool* finished_ptr = nullptr;
 
-    tensorrt_llm::kernels::MOEParallelismConfig moe_parallel_config = tensorrt_llm::kernels::MOEParallelismConfig(1, 0, 1, 0);
+    tensorrt_llm::kernels::MOEParallelismConfig moe_parallel_config = tensorrt_llm::kernels::MOEParallelismConfig::TensorParallelism(1, 0);
     tensorrt_llm::kernels::CutlassMoeFCRunner<T, WeightType> moe_runner;
-
-    // 获取SM版本并选择合适的tactic
-    int sm = getSMVersion();
-    sm = 80;
-    auto [tactic1, tactic2] = selectTacticsForArch(moe_runner, sm);
-    moe_runner.setTactic(std::make_optional(tactic1), std::make_optional(tactic2));
-
-    size_t bytes        = moe_runner.getWorkspaceSize(num_rows, hidden_size, inter_size, num_experts, k, fc1_activation_type, tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::RENORMALIZE, moe_parallel_config);
+    long int bytes        = moe_runner.getWorkspaceSize(num_rows, hidden_size, inter_size, num_experts, k, fc1_activation_type, moe_parallel_config);
 
     auto workspace_tensor = torch::empty({bytes}, torch::dtype(torch::kInt8).device(torch::kCUDA).requires_grad(false));
     char* workspace_ptr   = get_ptr<char>(workspace_tensor);
@@ -135,6 +91,7 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
     const at::ScalarType _st = input_activations.scalar_type();
     auto                 fc2_output =
         torch::empty({k * num_rows, hidden_size}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
+    T* fc2_output_ptr = get_ptr<T>(fc2_output);
 
     auto expert_scales     = torch::empty({num_rows, k}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
     T*   expert_scales_ptr = get_ptr<T>(expert_scales);
@@ -151,17 +108,15 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
         torch::empty({num_rows, hidden_size}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
     T* output_tensor_ptr = get_ptr<T>(output_tensor);
 
-    tensorrt_llm::kernels::QuantParams quant_params;
-    quant_params = tensorrt_llm::kernels::QuantParams::FP8(nullptr, nullptr, nullptr);
-
     moe_runner.runMoe(input_act_ptr,
                         gating_output_ptr,
                         fc1_expert_weights_ptr,
+                        fc1_scales_ptr, // nullptr
                         fc1_expert_biases_ptr, // nullptr
                         fc1_activation_type,
                         fc2_expert_weights_ptr,
+                        fc2_scales_ptr, // nullptr
                         fc2_expert_biases_ptr, // nullptr
-                        quant_params,
                         num_rows,
                         hidden_size,
                         inter_size,
@@ -169,14 +124,14 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
                         k,
                         workspace_ptr,
                         output_tensor_ptr,
+                        fc2_output_ptr,
                         finished_ptr, // nullptr
                         active_rows, // original num_rows
                         expert_scales_ptr,
                         expanded_source_row_to_expanded_dest_row_ptr,
                         expert_for_source_row_ptr,
-                        0.2f, // sparse_mixer_epsilon
                         moe_parallel_config,
-                        tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::RENORMALIZE,
+                        tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::NONE,
                         stream);
 
     return output_tensor;
@@ -196,6 +151,7 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
 
     const int num_rows    = input_activations.size(0);
     const int hidden_size = input_activations.size(1);
+    const int inter_size  = fc2_expert_weights.size(1);
     const int num_experts = gating_output.size(-1);
 
     torch::ScalarType quant_type = fc2_expert_weights.scalar_type();
@@ -213,12 +169,16 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
     TORCH_CHECK(fc1_expert_weights.size(0) == num_experts, "Experts mismatch between gate outputs and fc1 weights");
     TORCH_CHECK(fc1_expert_weights.size(1) == hidden_size,
                 "Activation last dim must equal size of dim 1 for fc1 weight");
+
+    const int fc1_num_cols = fc1_expert_weights.size(-1);
+
     
     CHECK_TH_CUDA(fc2_expert_weights);
     CHECK_CONTIGUOUS(fc2_expert_weights);
     TORCH_CHECK(fc2_expert_weights.dim() == 3, "Invalid rank for fc2 weights");
     TORCH_CHECK(fc2_expert_weights.size(0) == gating_output.size(-1),
                 "Experts mismatch between gate outputs and fc2 weights");
+    // TORCH_CHECK(fc2_expert_weights.size(1) == fc1_num_cols, "fc1 weight last dim must equal dim 1 of fc2 weights"); 如果是 glu 类，该条件无法满足
 
     Tensor output_tensor;
 

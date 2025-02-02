@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
 #include <cerrno>
 #include <cstdarg>
 #include <cstring>
-#include <iostream>
 #include <string>
 
 namespace tensorrt_llm::common
@@ -53,24 +52,6 @@ std::string fmtstr(char const* format, ...)
     std::string result = vformat(format, args);
     va_end(args);
     return result;
-};
-
-std::unordered_set<std::string> str2set(std::string const& input, char delimiter)
-{
-    std::unordered_set<std::string> values;
-    if (!input.empty())
-    {
-        std::stringstream valStream(input);
-        std::string val;
-        while (std::getline(valStream, val, delimiter))
-        {
-            if (!val.empty())
-            {
-                values.insert(val);
-            }
-        }
-    }
-    return values;
 };
 
 } // namespace tensorrt_llm::common

@@ -25,7 +25,7 @@ namespace tensorrt_llm
 namespace cutlass_extensions
 {
 
-template <typename GemmKernel, bool enable_cutlass_3x = false>
+template <typename GemmKernel>
 inline int compute_occupancy_for_kernel()
 {
 
@@ -39,14 +39,7 @@ inline int compute_occupancy_for_kernel()
         tensorrt_llm::common::check_cuda_error(cudaGetDevice(&device));
         tensorrt_llm::common::check_cuda_error(
             cudaDeviceGetAttribute(&max_smem_per_block, cudaDevAttrMaxSharedMemoryPerBlockOptin, device));
-        if constexpr (enable_cutlass_3x)
-        {
-            tensorrt_llm::common::check_cuda_error(cudaFuncGetAttributes(&attr, cutlass::device_kernel<GemmKernel>));
-        }
-        else
-        {
-            tensorrt_llm::common::check_cuda_error(cudaFuncGetAttributes(&attr, cutlass::Kernel<GemmKernel>));
-        }
+        tensorrt_llm::common::check_cuda_error(cudaFuncGetAttributes(&attr, cutlass::Kernel<GemmKernel>));
         if (smem_size + attr.sharedSizeBytes >= static_cast<size_t>(max_smem_per_block))
         {
             // This should mean that
@@ -55,31 +48,11 @@ inline int compute_occupancy_for_kernel()
             // configuration.
             return 0;
         }
-
-        if constexpr (enable_cutlass_3x)
-        {
-            tensorrt_llm::common::check_cuda_error(cudaFuncSetAttribute(
-                cutlass::device_kernel<GemmKernel>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
-        }
-        else
-        {
-            tensorrt_llm::common::check_cuda_error(cudaFuncSetAttribute(
-                cutlass::Kernel<GemmKernel>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
-        }
     }
 
     int max_active_blocks = -1;
-    if constexpr (enable_cutlass_3x)
-    {
-        tensorrt_llm::common::check_cuda_error(
-            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks, cutlass::device_kernel<GemmKernel>,
-                128 * (GemmKernel::NumLoadWarpGroups + GemmKernel::NumMmaWarpGroups), smem_size));
-    }
-    else
-    {
-        tensorrt_llm::common::check_cuda_error(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &max_active_blocks, cutlass::Kernel<GemmKernel>, GemmKernel::kThreadCount, smem_size));
-    }
+    tensorrt_llm::common::check_cuda_error(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &max_active_blocks, cutlass::Kernel<GemmKernel>, GemmKernel::kThreadCount, smem_size));
 
     return max_active_blocks;
 }

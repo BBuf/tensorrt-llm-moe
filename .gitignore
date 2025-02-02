@@ -1,3 +1,4 @@
 build/
 tensorrt_llm_moe.egg-info/
+tensorrt_llm_moe_2.egg-info/
 *.so

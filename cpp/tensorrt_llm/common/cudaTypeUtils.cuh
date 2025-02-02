@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2022-2023, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,14 +32,14 @@ namespace common
 {
 
 template <typename T>
-inline __device__ T ldg(T const* val)
+inline __device__ T ldg(const T* val)
 {
     return __ldg(val);
 }
 
 #if ENABLE_BF16
 template <>
-inline __device__ __nv_bfloat162 ldg(__nv_bfloat162 const* val)
+inline __device__ __nv_bfloat162 ldg(const __nv_bfloat162* val)
 {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
     return val[0];
@@ -49,7 +49,7 @@ inline __device__ __nv_bfloat162 ldg(__nv_bfloat162 const* val)
 }
 
 template <>
-inline __device__ __nv_bfloat16 ldg(__nv_bfloat16 const* val)
+inline __device__ __nv_bfloat16 ldg(const __nv_bfloat16* val)
 {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
     return val[0];
@@ -597,79 +597,15 @@ __device__ inline __nv_bfloat16 cuda_max(__nv_bfloat162 val)
 {
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
     return __hmax(val.x, val.y);
-#else
-    assert(0);
-    asm volatile("brkpt;\n" ::);
-    return __nv_bfloat16(0);
 #endif
 }
 #endif
 
-// Binary maximum: compute the max of two values.
+// Binary maximum: compute the max of two scalar types
 template <typename T>
 __device__ inline T cuda_max(T val1, T val2)
 {
     return (val1 > val2) ? val1 : val2;
-}
-
-template <>
-__device__ inline float2 cuda_max(float2 val1, float2 val2)
-{
-    float2 out;
-    out.x = fmaxf(val1.x, val2.x);
-    out.y = fmaxf(val1.y, val2.y);
-    return out;
-}
-
-template <>
-__device__ inline half2 cuda_max(half2 val1, half2 val2)
-{
-    return __hmax2(val1, val2);
-}
-
-#ifdef ENABLE_BF16
-template <>
-__device__ inline __nv_bfloat162 cuda_max(__nv_bfloat162 val1, __nv_bfloat162 val2)
-{
-    return __hmax2(val1, val2);
-}
-#endif // ENABLE_BF16
-
-// Binary maximum: compute the min of two values.
-template <typename T>
-__device__ inline T cuda_min(T val1, T val2)
-{
-    return (val1 < val2) ? val1 : val2;
-}
-
-template <>
-__device__ inline float2 cuda_min(float2 val1, float2 val2)
-{
-    float2 out;
-    out.x = fminf(val1.x, val2.x);
-    out.y = fminf(val1.y, val2.y);
-    return out;
-}
-
-template <>
-__device__ inline half2 cuda_min(half2 val1, half2 val2)
-{
-    return __hmin2(val1, val2);
-}
-
-#ifdef ENABLE_BF16
-template <>
-__device__ inline __nv_bfloat162 cuda_min(__nv_bfloat162 val1, __nv_bfloat162 val2)
-{
-    return __hmin2(val1, val2);
-}
-#endif // ENABLE_BF16
-
-// Helper function of clamping the val into the given range.
-template <typename T>
-inline __device__ T cuda_clamp(T val, T minVal, T maxVal)
-{
-    return cuda_min(cuda_max(val, minVal), maxVal);
 }
 
 #ifdef ENABLE_FP8

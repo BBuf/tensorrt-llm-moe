@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,31 +17,18 @@
 #pragma once
 
 #include "tensorrt_llm/common/cudaBf16Wrapper.h"
-#include "tensorrt_llm/common/cudaDriverWrapper.h"
 #include "tensorrt_llm/common/cudaFp8Utils.h"
 #include "tensorrt_llm/common/logger.h"
 #include "tensorrt_llm/common/tllmException.h"
-#include <algorithm>
 #include <cinttypes>
 #include <cublasLt.h>
 #include <cublas_v2.h>
-#include <cuda.h>
 #include <cuda_runtime.h>
-#include <driver_types.h>
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <optional>
 #include <string>
-#ifndef _WIN32 // Linux
-#include <sys/sysinfo.h>
-#endif         // not WIN32
 #include <vector>
-#ifdef _WIN32  // Windows
-#include <windows.h>
-#undef ERROR   // A Windows header file defines ERROR as 0, but it's used in our logger.h enum. Logging breaks without
-               // this undef.
-#endif         // WIN32
 
 namespace tensorrt_llm::common
 {
@@ -86,12 +73,12 @@ enum class OperationType
 };
 
 /* **************************** debug tools ********************************* */
-static char const* _cudaGetErrorEnum(cudaError_t error)
+static const char* _cudaGetErrorEnum(cudaError_t error)
 {
     return cudaGetErrorString(error);
 }
 
-static char const* _cudaGetErrorEnum(cublasStatus_t error)
+static const char* _cudaGetErrorEnum(cublasStatus_t error)
 {
     switch (error)
     {
@@ -119,20 +106,9 @@ static char const* _cudaGetErrorEnum(cublasStatus_t error)
 }
 
 template <typename T>
-void check(T result, char const* const func, char const* const file, int const line)
+void check(T result, char const* const func, const char* const file, int const line)
 {
     if (result)
-    {
-        throw TllmException(
-            file, line, fmtstr("[TensorRT-LLM][ERROR] CUDA runtime error in %s: %s", func, _cudaGetErrorEnum(result)));
-    }
-}
-
-template <typename T>
-void checkEx(T result, std::initializer_list<T> const& validReturns, char const* const func, char const* const file,
-    int const line)
-{
-    if (std::all_of(std::begin(validReturns), std::end(validReturns), [&result](T const& t) { return t != result; }))
     {
         throw TllmException(
             file, line, fmtstr("[TensorRT-LLM][ERROR] CUDA runtime error in %s: %s", func, _cudaGetErrorEnum(result)));
@@ -142,46 +118,33 @@ void checkEx(T result, std::initializer_list<T> const& validReturns, char const*
 #define check_cuda_error(val) check((val), #val, __FILE__, __LINE__)
 #define check_cuda_error_2(val, file, line) check((val), #val, file, line)
 
-inline std::optional<bool> isCudaLaunchBlocking()
+inline bool isCudaLaunchBlocking()
 {
     static bool firstCall = true;
-    static std::optional<bool> result = std::nullopt;
+    static bool result = false;
 
     if (firstCall)
     {
-        char const* env = std::getenv("CUDA_LAUNCH_BLOCKING");
-        if (env != nullptr && std::string(env) == "1")
-        {
-            result = true;
-        }
-        else if (env != nullptr && std::string(env) == "0")
-        {
-            result = false;
-        }
+        const char* env = std::getenv("CUDA_LAUNCH_BLOCKING");
+        result = env != nullptr && std::string(env) == "1";
         firstCall = false;
     }
 
     return result;
 }
 
-inline bool doCheckError()
+inline void syncAndCheck(const char* const file, int const line)
 {
-    auto const cudaLaunchBlocking = isCudaLaunchBlocking();
 #ifndef NDEBUG
-    bool const checkError = cudaLaunchBlocking.value_or(true);
+    const bool checkError = true;
 #else
-    bool const checkError = cudaLaunchBlocking.value_or(false);
+    const bool checkError = isCudaLaunchBlocking();
 #endif
 
-    return checkError;
-}
-
-inline void syncAndCheck(char const* const file, int const line)
-{
-    if (doCheckError())
+    if (checkError)
     {
-        cudaDeviceSynchronize();
-        check(cudaGetLastError(), "cudaGetLastError", file, line);
+        cudaError_t result = cudaDeviceSynchronize();
+        check(result, "cudaDeviceSynchronize", file, line);
     }
 }
 
@@ -306,75 +269,19 @@ inline int getDeviceCount()
     return count;
 }
 
-/// @brief Identifies the memory type of the given pointer.
-template <typename T>
-cudaMemoryType getPtrCudaMemoryType(T* ptr)
-{
-    cudaPointerAttributes attributes{};
-    check_cuda_error(cudaPointerGetAttributes(&attributes, ptr));
-    return attributes.type;
-}
-
 /// Get the memory info
 /// \return The free and total amount of memory in bytes
-inline std::tuple<size_t, size_t> getDeviceMemoryInfo(bool const useUvm)
+inline std::tuple<size_t, size_t> getDeviceMemoryInfo()
 {
-    if (useUvm)
-    {
-        size_t freeSysMem = 0;
-        size_t totalSysMem = 0;
-#ifndef _WIN32 // Linux
-        struct sysinfo info
-        {
-        };
-
-        sysinfo(&info);
-        totalSysMem = info.totalram * info.mem_unit;
-        freeSysMem = info.freeram * info.mem_unit;
-#else  // Windows
-        MEMORYSTATUSEX memInfo;
-        memInfo.dwLength = sizeof(memInfo);
-        GlobalMemoryStatusEx(&memInfo);
-        totalSysMem = memInfo.ullTotalPhys;
-        freeSysMem = memInfo.ullAvailPhys;
-#endif // WIN32
-
-        TLLM_LOG_INFO("Using UVM based system memory for KV cache, total memory %0.2f GB, available memory %0.2f GB",
-            ((double) totalSysMem / 1e9), ((double) freeSysMem / 1e9));
-        return {freeSysMem, totalSysMem};
-    }
-
-    size_t free = 0;
-    size_t total = 0;
+    size_t free, total;
     check_cuda_error(cudaMemGetInfo(&free, &total));
-    TLLM_LOG_DEBUG("Using GPU memory for KV cache, total memory %0.2f GB, available memory %0.2f GB",
-        ((double) total / 1e9), ((double) free / 1e9));
     return {free, total};
-}
-
-/// @brief Gets the memory allocation granularity for the current device.
-///
-/// @return size_t The size of the smallest difference in memory size supported by the current device.
-inline size_t getAllocationGranularity()
-{
-    auto const currentDevice = getDevice();
-    ::CUmemAllocationProp prop = {};
-
-    prop.type = ::CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.location.type = ::CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id = currentDevice;
-    prop.requestedHandleTypes = ::CU_MEM_HANDLE_TYPE_NONE;
-
-    // Get the minimum granularity supported for allocation with cuMemCreate()
-    size_t granularity = 0;
-    TLLM_CU_CHECK(cuMemGetAllocationGranularity(&granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM));
-    return granularity;
 }
 
 inline int getMultiProcessorCount()
 {
-    int device_id = 0;
-    int multi_processor_count = 0;
+    int device_id;
+    int multi_processor_count;
     check_cuda_error(cudaGetDevice(&device_id));
     check_cuda_error(cudaDeviceGetAttribute(&multi_processor_count, cudaDevAttrMultiProcessorCount, device_id));
     return multi_processor_count;
@@ -382,25 +289,17 @@ inline int getMultiProcessorCount()
 
 inline int getMaxSharedMemoryPerBlockOptin()
 {
-    int device_id = 0;
-    int max_shared_memory_per_block = 0;
+    int device_id;
+    int max_shared_memory_per_block;
     check_cuda_error(cudaGetDevice(&device_id));
     check_cuda_error(
         cudaDeviceGetAttribute(&max_shared_memory_per_block, cudaDevAttrMaxSharedMemoryPerBlockOptin, device_id));
     return max_shared_memory_per_block;
 }
 
-template <typename T1, typename T2>
-inline size_t divUp(const T1& a, const T2& n)
+inline int divUp(int a, int n)
 {
-    auto const tmp_a = static_cast<size_t>(a);
-    auto const tmp_n = static_cast<size_t>(n);
-    return (tmp_a + tmp_n - 1) / tmp_n;
-}
-
-inline int roundUp(int a, int n)
-{
-    return divUp(a, n) * n;
+    return (a + n - 1) / n;
 }
 
 template <typename T, typename U, typename = std::enable_if_t<std::is_integral<T>::value>,
@@ -411,7 +310,7 @@ auto constexpr ceilDiv(T numerator, U denominator)
 }
 
 template <typename T>
-void printAbsMean(T const* buf, uint64_t size, cudaStream_t stream, std::string name = "")
+void printAbsMean(const T* buf, uint64_t size, cudaStream_t stream, std::string name = "")
 {
     if (buf == nullptr)
     {
@@ -450,9 +349,9 @@ void printAbsMean(T const* buf, uint64_t size, cudaStream_t stream, std::string 
 }
 
 template <typename T>
-void printToStream(T const* result, int const size, FILE* strm)
+void printToStream(const T* result, const int size, FILE* strm)
 {
-    bool const split_rows = (strm == stdout);
+    const bool split_rows = (strm == stdout);
     if (result == nullptr)
     {
         TLLM_LOG_WARNING("It is an nullptr, skip! \n");
@@ -474,13 +373,13 @@ void printToStream(T const* result, int const size, FILE* strm)
 }
 
 template <typename T>
-void printToScreen(T const* result, int const size)
+void printToScreen(const T* result, const int size)
 {
     printToStream(result, size, stdout);
 }
 
 template <typename T>
-void print2dToStream(T const* result, int const r, int const c, int const stride, FILE* strm)
+void print2dToStream(const T* result, const int r, const int c, const int stride, FILE* strm)
 {
     if (result == nullptr)
     {
@@ -489,20 +388,20 @@ void print2dToStream(T const* result, int const r, int const c, int const stride
     }
     for (int ri = 0; ri < r; ++ri)
     {
-        T const* ptr = result + ri * stride;
+        const T* ptr = result + ri * stride;
         printToStream(ptr, c, strm);
     }
     fprintf(strm, "\n");
 }
 
 template <typename T>
-void print2dToScreen(T const* result, int const r, int const c, int const stride)
+void print2dToScreen(const T* result, const int r, const int c, const int stride)
 {
     print2dToStream(result, r, c, stride, stdout);
 }
 
 template <typename T>
-void print2dToFile(std::string fname, T const* result, int const r, int const c, int const stride)
+void print2dToFile(std::string fname, const T* result, const int r, const int c, const int stride)
 {
     FILE* fp = fopen(fname.c_str(), "wt");
     if (fp != nullptr)
@@ -526,21 +425,12 @@ inline void print_element_(half x)
 {
     print_float_((float) x);
 }
-
 #ifdef ENABLE_BF16
 inline void print_element_(__nv_bfloat16 x)
 {
     print_float_((float) x);
 }
 #endif
-
-#ifdef ENABLE_FP8
-inline void print_element_(__nv_fp8_e4m3 x)
-{
-    print_float_((float) x);
-}
-#endif
-
 inline void print_element_(uint32_t ul)
 {
     printf("%7" PRIu32, ul);
@@ -562,7 +452,7 @@ inline void print_element_(int64_t ill)
 }
 
 template <typename T>
-inline void printMatrix(T const* ptr, int m, int k, int stride, bool is_device_ptr)
+inline void printMatrix(const T* ptr, int m, int k, int stride, bool is_device_ptr)
 {
     T* tmp;
     if (is_device_ptr)
@@ -607,17 +497,14 @@ inline void printMatrix(T const* ptr, int m, int k, int stride, bool is_device_p
     }
 }
 
-template void printMatrix(float const* ptr, int m, int k, int stride, bool is_device_ptr);
-template void printMatrix(half const* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const float* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const half* ptr, int m, int k, int stride, bool is_device_ptr);
 #ifdef ENABLE_BF16
-template void printMatrix(__nv_bfloat16 const* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const __nv_bfloat16* ptr, int m, int k, int stride, bool is_device_ptr);
 #endif
-#ifdef ENABLE_FP8
-template void printMatrix(__nv_fp8_e4m3 const* ptr, int m, int k, int stride, bool is_device_ptr);
-#endif
-template void printMatrix(uint32_t const* ptr, int m, int k, int stride, bool is_device_ptr);
-template void printMatrix(uint64_t const* ptr, int m, int k, int stride, bool is_device_ptr);
-template void printMatrix(int const* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const uint32_t* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const uint64_t* ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(const int* ptr, int m, int k, int stride, bool is_device_ptr);
 
 } // namespace tensorrt_llm::common
 
@@ -628,14 +515,4 @@ template void printMatrix(int const* ptr, int m, int k, int stride, bool is_devi
     do                                                                                                                 \
     {                                                                                                                  \
         tensorrt_llm::common::check((stat), #stat, __FILE__, __LINE__);                                                \
-    } while (0)
-
-// We use singleton memory pool and the order of destructors depends on the compiler implementation. We find that the
-// cudaFree/cudaFreeHost is called after cudaruntime destruction on Windows. There will be an cudaErrorCudartUnloading
-// error.  However, it is safe to ignore this error because the cuda runtime is already exited, we are no more worried
-// about the memory leaks.
-#define TLLM_CUDA_CHECK_FREE_RESOURCE(stat)                                                                            \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        tensorrt_llm::common::checkEx((stat), {cudaSuccess, cudaErrorCudartUnloading}, #stat, __FILE__, __LINE__);     \
     } while (0)

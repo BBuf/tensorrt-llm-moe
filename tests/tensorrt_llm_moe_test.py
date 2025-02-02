@@ -29,8 +29,8 @@ def apply_act(inp, act_str):
 class TestMoe(unittest.TestCase):
 
   def setUp(self) -> None:
-    import tensorrt_llm_moe
-    self.run_moe_fc = tensorrt_llm_moe.run_moe_fc
+    import tensorrt_llm_moe_2
+    self.run_moe_fc = tensorrt_llm_moe_2.run_moe_fc
     torch.manual_seed(1)
   
   def generate_inputs(self, num_rows, active_rows, hidden_size, num_experts, dtype, quant_type):

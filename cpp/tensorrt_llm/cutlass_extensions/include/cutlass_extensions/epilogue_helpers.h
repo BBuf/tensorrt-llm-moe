@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +30,6 @@
 #include "cutlass/epilogue/thread/linear_combination_relu.h"
 #include "cutlass/epilogue/thread/linear_combination_silu.h"
 #include "cutlass_extensions/epilogue/thread/fused_activations.h"
-#include <cutlass/epilogue/fusion/operations.hpp>
 
 namespace tensorrt_llm
 {
@@ -49,10 +48,6 @@ struct EpilogueOpBiasFtGelu
 {
 };
 
-struct EpilogueOpBias
-{
-};
-
 struct EpilogueOpDefaultSilu
 {
 };
@@ -65,6 +60,10 @@ struct EpilogueOpDefaultFtGelu
 {
 };
 
+struct EpilogueOpBias
+{
+};
+
 struct EpilogueOpDefault
 {
 };
@@ -72,7 +71,6 @@ struct EpilogueOpDefault
 template <typename ElementType, int ElementsPerVectorAccess, typename ElementAccumulator, typename Op>
 struct Epilogue
 {
-    static_assert(sizeof(ElementType) == 0, "Unrecognized Epilogue Tag");
 };
 
 constexpr auto BiasScaleMode = cutlass::epilogue::thread::ScaleType::NoBetaScaling;
