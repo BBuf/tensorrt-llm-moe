@@ -71,6 +71,37 @@ using namespace tensorrt_llm::common;
 namespace tensorrt_llm::kernels
 {
 
+
+template<typename T>
+void printToScreen(const T* device_data, const int size) {
+    // 分配主机内存
+    std::vector<T> host_data(size);
+    
+    // 将设备内存拷贝到主机内存
+    cudaMemcpy(host_data.data(), device_data, size * sizeof(T), cudaMemcpyDeviceToHost);
+    
+    // 打印数据
+    std::cout << "\nData (size=" << size << "):" << std::endl;
+    for (int i = 0; i < size; i++) {
+        // 设置输出精度和对齐
+        std::cout << std::setw(10) << std::setprecision(6) << std::fixed << float(host_data[i]);
+        
+        // 每行打印8个数字
+        if ((i + 1) % 8 == 0 || i == size - 1) {
+            std::cout << std::endl;
+        }
+    }
+    std::cout << std::endl;
+}
+
+// 为常用类型添加显式实例化
+template void printToScreen<float>(const float* device_data, const int size);
+template void printToScreen<half>(const half* device_data, const int size);
+#ifdef ENABLE_BF16
+template void printToScreen<__nv_bfloat16>(const __nv_bfloat16* device_data, const int size);
+#endif
+
+
 static constexpr int WARP_SIZE = 32;
 
 // ====================== Softmax things ===============================
@@ -1517,6 +1548,8 @@ void CutlassMoeFCRunner<T, WeightType, OutputType, ScaleBiasType, Enable>::gemm1
 
     int64_t const* total_tokens_including_expert = expert_first_token_offset + 1;
 
+    std::cout << "using_hopper_gemm1: " << using_hopper_gemm1 << std::endl;
+    std::cout << "is_gated_activation: " << is_gated_activation << std::endl;
     if (using_hopper_gemm1)
     {
         TLLM_CHECK(config.is_sm90);
@@ -1568,11 +1601,22 @@ void CutlassMoeFCRunner<T, WeightType, OutputType, ScaleBiasType, Enable>::gemm1
     {
         TLLM_CHECK(!use_ampere_activation_fusion);
         TLLM_CHECK(!config.is_sm90);
+
+        std::cout << "enter here" << std::endl;
+        printToScreen(input, expanded_num_rows * hidden_size);
+        printToScreen(fc1_expert_weights, inter_size * hidden_size);
+
+        std::cout << "total_tokens_including_expert: " << total_tokens_including_expert << std::endl;
+        std::cout << "expanded_num_rows: " << expanded_num_rows << std::endl;
+        std::cout << "fc1_out_size: " << fc1_out_size << std::endl;
+        std::cout << "hidden_size: " << hidden_size << std::endl;
+        std::cout << "num_experts_per_node: " << num_experts_per_node << std::endl;
         gemm_runner.moeGemmBiasAct(input, fc1_expert_weights, fc1_int_scales, fc1_expert_biases, bias_is_broadcast,
             output, total_tokens_including_expert, HopperGroupedGemmInput{}, expanded_num_rows, fc1_out_size,
             hidden_size, num_experts_per_node, fc1_activation_type, false, alpha_scale_ptr_array, stream, config);
-
+        
         sync_check_cuda_error();
+        printToScreen(output, 10);
     }
     else
     {

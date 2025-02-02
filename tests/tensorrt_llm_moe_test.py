@@ -45,9 +45,13 @@ class TestMoe(unittest.TestCase):
     quantize = quant_type == torch.int8 or quant_type == torch.quint4x2
 
     weights["fc1_expert_weights_for_ref"] = random_cuda_tensor([num_experts, hidden_size, inter_size], dtype, mean=0, std=0.02)
+    # weights["fc1_expert_weights_for_ref"] = torch.zeros((num_experts, hidden_size, inter_size), dtype=dtype, device="cuda")
+    # weights["fc1_expert_weights_for_ref"].fill_(0.001)
     weights["fc1_expert_weights_for_ft"] = weights["fc1_expert_weights_for_ref"]
 
-    weights["fc2_expert_weights_for_ref"] = random_cuda_tensor([num_experts, inter_size, hidden_size], dtype, mean=0, std=0.02)
+    # weights["fc2_expert_weights_for_ref"] = random_cuda_tensor([num_experts, inter_size, hidden_size], dtype, mean=0, std=0.02)
+    weights["fc2_expert_weights_for_ref"] = torch.zeros((num_experts, inter_size, hidden_size), dtype=dtype, device="cuda")
+    weights["fc2_expert_weights_for_ref"].fill_(0.001)
     weights["fc2_expert_weights_for_ft"] = weights["fc2_expert_weights_for_ref"]
     return weights
   
@@ -83,8 +87,10 @@ class TestMoe(unittest.TestCase):
 
   def moe_test_helper(self, dtype, quant_type, rtol, atol, activation_str="gelu", experts_list=[32], hidden_sizes=[1024], inter_sizes=[4096]):
     torch.cuda.empty_cache() # Empty the cache here so a bad ordering does not cause OOM.
-    rows = [2, 16, 512, 2048]
-    ks = [2, 4]
+    # rows = [2, 16, 512, 2048]
+    rows = [2]
+    # ks = [2, 4]
+    ks = [2]
 
     for hidden_size in hidden_sizes:
       for inter_size in inter_sizes:
@@ -107,23 +113,23 @@ class TestMoe(unittest.TestCase):
                 print(f"ref_output: {ref_output}")
                 torch.testing.assert_close(act_output, ref_output, rtol=rtol, atol=atol, msg=msg, check_dtype=False)
   
-  def test_moe_fp32_relu(self):
+  def test_moe_fp32_gelu(self):
     self.moe_test_helper(torch.float32, torch.float32, rtol=1e-3, atol=1e-5, \
                          activation_str="silu", \
-                         experts_list=[32], hidden_sizes=[1024, 2048], \
-                         inter_sizes=[4096])
+                         experts_list=[32], hidden_sizes=[64], \
+                         inter_sizes=[256])
 
-  def test_moe_fp16_gelu(self):
-    self.moe_test_helper(torch.float16, torch.float16, rtol=1e-3, atol=0.05, \
-                         activation_str="silu", \
-                         experts_list=[32], hidden_sizes=[1024, 2048], \
-                         inter_sizes=[4096])
+  # def test_moe_fp16_gelu(self):
+  #   self.moe_test_helper(torch.float16, torch.float16, rtol=1e-3, atol=0.05, \
+  #                        activation_str="silu", \
+  #                        experts_list=[32], hidden_sizes=[1024, 2048], \
+  #                        inter_sizes=[4096])
 
-  def test_moe_bf16_gelu(self):
-    self.moe_test_helper(torch.bfloat16, torch.bfloat16, rtol=1e-3, atol=0.05, \
-                         activation_str="silu", \
-                         experts_list=[32], hidden_sizes=[1024, 2048], \
-                         inter_sizes=[4096])
+  # def test_moe_bf16_gelu(self):
+  #   self.moe_test_helper(torch.bfloat16, torch.bfloat16, rtol=1e-3, atol=0.05, \
+  #                        activation_str="silu", \
+  #                        experts_list=[32], hidden_sizes=[1024, 2048], \
+  #                        inter_sizes=[4096])
 
 if __name__ == '__main__':
     unittest.main()

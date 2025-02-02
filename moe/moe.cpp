@@ -123,10 +123,11 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
 
     // 获取SM版本并选择合适的tactic
     int sm = getSMVersion();
+    sm = 80;
     auto [tactic1, tactic2] = selectTacticsForArch(moe_runner, sm);
     moe_runner.setTactic(std::make_optional(tactic1), std::make_optional(tactic2));
 
-    long int bytes        = moe_runner.getWorkspaceSize(num_rows, hidden_size, inter_size, num_experts, k, fc1_activation_type, tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::NONE, moe_parallel_config);
+    size_t bytes        = moe_runner.getWorkspaceSize(num_rows, hidden_size, inter_size, num_experts, k, fc1_activation_type, tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::RENORMALIZE, moe_parallel_config);
 
     auto workspace_tensor = torch::empty({bytes}, torch::dtype(torch::kInt8).device(torch::kCUDA).requires_grad(false));
     char* workspace_ptr   = get_ptr<char>(workspace_tensor);
@@ -175,7 +176,7 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
                         expert_for_source_row_ptr,
                         0.2f, // sparse_mixer_epsilon
                         moe_parallel_config,
-                        tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::NONE,
+                        tensorrt_llm::kernels::MOEExpertScaleNormalizationMode::RENORMALIZE,
                         stream);
 
     return output_tensor;
