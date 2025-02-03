@@ -13,7 +13,6 @@
 
 using torch::Tensor;
 
-// 获取SM版本
 int getSMVersion() {
     int device = -1;
     cudaGetDevice(&device);
@@ -121,9 +120,7 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
     tensorrt_llm::kernels::MOEParallelismConfig moe_parallel_config = tensorrt_llm::kernels::MOEParallelismConfig(1, 0, 1, 0);
     tensorrt_llm::kernels::CutlassMoeFCRunner<T, WeightType> moe_runner;
 
-    // 获取SM版本并选择合适的tactic
     int sm = getSMVersion();
-    sm = 80;
     auto [tactic1, tactic2] = selectTacticsForArch(moe_runner, sm);
     moe_runner.setTactic(std::make_optional(tactic1), std::make_optional(tactic2));
 

@@ -680,7 +680,6 @@ void MoeGemmRunner<T, WeightType, OutputType, ScaleBiasType>::dispatchToArch<Epi
                 "information is not required");
             TLLM_CHECK_WITH_INFO(!gemm_config.is_sm90,
                 "GEMM config is for SM90 configuration, but this configuration is not valid for Hppper");
-            std::cout << "dispatchMoeGemmToCutlass<T, WeightType, ScaleBiasType, cutlass::arch::Sm80, EpilogueTag>" << std::endl;
             dispatchMoeGemmToCutlass<T, WeightType, ScaleBiasType, cutlass::arch::Sm80, EpilogueTag>(A, B,
                 weight_scales, biases, bias_is_broadcast, C, total_tokens_including_expert, total_rows, gemm_n, gemm_k,
                 num_experts, gemm_config, multi_processor_count_, use_fused_moe, alpha_scale_ptr_array, stream,
