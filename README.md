@@ -1,8 +1,10 @@
 # NOTE
 
-**The `tensorrt-llm-moe` will be take over by sglang-project team, and the code will be moved to `sglang-project/tensorrt-llm-moe`.**
+**The `tensorrt-llm-moe` will be take over by sglang-project team(https://github.com/sgl-project), and the code will be moved to `sgl-project/tensorrt-llm-moe`.**
 
-We will open source when the code is ready.
+And We will **open source the repo** when feature is stable and ready when integrate into SGLang.
+
+Finally, I'm also a member of sglang devlopment team, welcome to join us.
 
 # tensorrt-llm-moe
 Use TensorRT LLM MoE as a library
