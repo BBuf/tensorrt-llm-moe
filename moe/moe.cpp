@@ -90,7 +90,7 @@ tensorrt_llm::ActivationType getActivationType(std::string activation_type_str)
 }
 
 template<typename T, typename WeightType>
-Tensor run_moe_fc_helper(Tensor                            input_activations, //(num_tokens, hidden_size)
+Tensor trt_llm_fused_moe_helper(Tensor                            input_activations, //(num_tokens, hidden_size)
                          Tensor                            gating_output, //(num_tokens, num_experts)
                          Tensor                            fc1_expert_weights, //(num_experts, hidden_size, inter_size)
                          tensorrt_llm::ActivationType fc1_activation_type,
@@ -180,7 +180,7 @@ Tensor run_moe_fc_helper(Tensor                            input_activations, //
 }
 
 
-Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
+Tensor trt_llm_fused_moe(Tensor      input_activations, //(num_tokens, hidden_size)
                   Tensor      gating_output, //(num_tokens, num_experts)
                   Tensor      fc1_expert_weights, //(num_experts, hidden_size, inter_size)
                   std::string fc1_activation_type_str,
@@ -231,7 +231,7 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
         case at::ScalarType::Float: {
 
             if (quant_type == _st) {
-                output_tensor = run_moe_fc_helper<float, float>(input_activations,
+                output_tensor = trt_llm_fused_moe_helper<float, float>(input_activations,
                                                                 gating_output,
                                                                 fc1_expert_weights,
                                                                 fc1_activation_type,
@@ -248,7 +248,7 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
         case at::ScalarType::Half: {
 
             if (quant_type == _st) {
-                output_tensor = run_moe_fc_helper<half, half>(input_activations,
+                output_tensor = trt_llm_fused_moe_helper<half, half>(input_activations,
                                                               gating_output,
                                                               fc1_expert_weights,
                                                               fc1_activation_type,
@@ -265,7 +265,7 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
 #ifdef ENABLE_BF16
         case at::ScalarType::BFloat16: {
             if (quant_type == _st) {
-                output_tensor = run_moe_fc_helper<__nv_bfloat16, __nv_bfloat16>(input_activations,
+                output_tensor = trt_llm_fused_moe_helper<__nv_bfloat16, __nv_bfloat16>(input_activations,
                                                                                 gating_output,
                                                                                 fc1_expert_weights,
                                                                                 fc1_activation_type,
@@ -288,5 +288,5 @@ Tensor run_moe_fc(Tensor      input_activations, //(num_tokens, hidden_size)
 
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("run_moe_fc", &run_moe_fc, "moe.");
+  m.def("trt_llm_fused_moe", &trt_llm_fused_moe, "moe.");
 }
